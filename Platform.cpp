@@ -6,6 +6,7 @@
 #include "ColorEnum.hpp"
 #include "Raction.hpp"
 #include "GameTree.hpp"
+// #include "GameTree2.hpp"
 using namespace std;
 
 class coordinate {
@@ -26,6 +27,7 @@ public:
     Platform();
     void run();
     bool react(Color color, int x, int y);
+    void test(int masses[5][6], Color colors[5][6], Color inputColor);
     void outputLog();
     void printCriticals();
 
@@ -46,13 +48,12 @@ Platform::Platform() {
         if (j == 0 || j == 5) --criticals[i][j];
         colors[i][j] = White;
     }
-    // printCriticals();
 };
 
 void Platform::run() {
-    RAction st1;
+    // RAction st1;
+    Student st1;
     Student st2;
-
     while(true) {
         // cout << "--st1.makeMove, ";
         st1.makeMove(masses, criticals, colors, Blue);
@@ -74,7 +75,7 @@ void Platform::run() {
 
 bool Platform::react(Color color, int x, int y) {
 
-    if (colors[x][y] == Black) {
+    if (colors[x][y] != White && colors[x][y] != color) {
         if (color == Red) winnerColor = Blue;
         else winnerColor = Red;
         // cout << " react complete." << endl;
@@ -102,24 +103,31 @@ bool Platform::react(Color color, int x, int y) {
     }
     // cout << " react complete." << endl;
     if (rounds <=2) return false;
-    int blues = 0, reds = 0;
+    int blues = 0, reds = 0, whites = 0;
     for (int i = 0 ; i < 5 ; ++i) for (int j = 0 ; j < 6 ; ++j) {
         if (colors[i][j] == Blue) ++blues;
         else if (colors[i][j] == Red) ++reds;
+        else if (colors[i][j] == White) ++whites;
     }
     if (color == Red) {
-        if (blues == 0) {
+        if (blues == 0 && (reds != 0 || whites == 0)) {
             winnerColor = Red;
             return true;
         } else return false;
     }
     if (color == Blue) {
-        if (reds == 0) {
+        if (reds == 0 && (blues != 0 || whites == 0)) {
             winnerColor = Blue;
             return true;
         } else return false;
     }
     return false;
+};
+
+void Platform::test(int masses[5][6], Color colors[5][6], Color inputColor) {
+    Student st1;
+    st1.makeMove(masses, criticals, colors, inputColor);
+    cout << "x: " << st1.getX() << ", y: " << st1.getY() << endl;
 };
 
 void Platform::outputLog() {
@@ -149,8 +157,26 @@ int main() {
     Platform p;
     constexpr auto &&now = std::chrono::high_resolution_clock::now;
     auto start = now();
+
     p.run();
     p.outputLog();
+
+    // int masses[5][6] {
+    //     2, 3, 3, 3, 3, 2,
+    //     3, 2, 3, 3, 3, 2,
+    //     3, 1, 3, 2, 4, 3,
+    //     2, 0, 3, 4, 4, 3,
+    //     1, 2, 3, 3, 3, 2
+    // };
+    // Color colors[5][6] {
+    //     Black, Black, Black, Black, Black, Black,
+    //     Black, Blue, Blue, Red, Blue, Red,
+    //     Black, Blue, Blue, Blue, Black, Black,
+    //     Blue, White, Blue, Black, Black, Black,
+    //     Red, Red, Black, Black, Black, Black
+    // };
+    // p.test(masses, colors, Red);
+
     chrono::duration<double> elapsed = now() - start;
     cout << " -- Program Complete in: " << (int) (elapsed.count() * 1000) << " ms." << endl;
 };

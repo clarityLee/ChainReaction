@@ -1,200 +1,205 @@
 #include <chrono>
 #include <queue>
 #include <vector>
+#include <iostream>
 #include "GameTree.hpp"
-
 using namespace std;
 
-void Student::makeMove(int Record[5][6], int Max[5][6], Color color[5][6], Color inputColor) {
-    ++rounds;
-    if (inited) update(Record, color, inputColor);
-    else init(Record, Max, color, inputColor);
-    if (rounds > 3) gameTreeLevel = 6;
-    else if (rounds > 5) gameTreeLevel = 7;
-    else if (rounds > 7) gameTreeLevel = 8;
-    else if (rounds > 9) gameTreeLevel = 9;
-    else if (rounds > 11) gameTreeLevel = 10;
-    else if (rounds > 13) gameTreeLevel = 11;
+inline void GameState::swapColor() {
+    const Color _tmp = currentPlayerColor; 
+    currentPlayerColor = nextPlayerColor;
+    nextPlayerColor = _tmp;
+}
 
+Student::Student(): cells(30) {
+    for (int_fast8_t i = 0 ; i < 30 ; ++i) cells[i].index = i;
+};
+
+void Student::makeMove(int Record[5][6], int Max[5][6], Color color[5][6], Color inputColor) {
+    if (playerColor == White) {
+        playerColor = inputColor; enemyColor = (inputColor == Blue) ? Red : Blue;
+    }
+    for (int_fast8_t i = 0, index = 0; i < 5 ; ++i) for (int_fast8_t j = 0 ; j < 6 ; ++j, ++index) {
+        cells[index].mass = Record[i][j];
+        cells[index].color = color[i][j];
+    }
+    switch(++rounds) {
+        // case 12: gameTreeLevel =  6; break;
+        // case  6: gameTreeLevel =  7; break;
+        // case 16: gameTreeLevel =  8; break;
+        // case 18: gameTreeLevel =  9; break;
+        case  8: gameTreeLevel =  5; break;
+        case 15: gameTreeLevel =  6; break;
+        case 20: gameTreeLevel =  7; break;
+    }
+    // rounds = 23;
+    // gameTreeLevel = 8;
     constexpr auto &&now = std::chrono::high_resolution_clock::now;
     auto start = now();
-
-    auto root = make_shared<State>(cells, 0, playerColor, enemyColor);
-    int max = maxVal(root, 0, 0, false, false);
-    Cell &c = cells[root->choiceIndex];
-    x = c.i; y = c.j;
+    cout << " -- Round " << (short) rounds << "...";
+    execCount = 0;
+    choiceIndex = -1;
+    GameState root(cells, 0, playerColor, enemyColor);
+    maxVal(root);
+    cout << ", choiceIndex: " << (int) choiceIndex;
+    // cout << ", minmanx: " << value;
+    if (choiceIndex < 0) {
+        auto moves = availableMoves(root);
+        if (moves.empty()) {x = 0; y = 0;}
+        else choiceIndex = moves[0];
+        cout << ", choiceIndex: " << (int) choiceIndex;
+    }
     
+    x = choiceIndex/6; y = choiceIndex%6;
+
     chrono::duration<double> elapsed = now() - start;
-    cout << " -- Round " << rounds << ", GameTree Complete in: " << (int) (elapsed.count() * 1000) << " ms." << endl;
-
+    cout << " GameTree Complete in: " << (int) (elapsed.count() * 1000) << " ms, "
+        << "execCount: " << execCount << endl;
 };
-// Any Code You Want to Add
-int Student::getX() {
-    return x;
-};
-int Student::getY() {
-    return y;
-};
-void Student::init(int masses[5][6], int critical[5][6], Color color[5][6], Color inputColor) {
-    
-    cells.clear(); cells.reserve(30);
+int Student::getX() {return x;};
+int Student::getY() {return y;};
 
-    for (int i = 0 ; i < 5 ; ++i) for (int j = 0 ; j < 6 ; ++j) {
-        cells.emplace_back(cells.size(), i, j, masses[i][j], critical[i][j], color[i][j]);
-    }
-    adjIndices.clear(); adjIndices.reserve(30); adjIndices.resize(30);
-    for (short index = 0 ; index < 30 ; ++index) {
-        Cell &c = cells[index];
-        std::vector<short> &adjs = adjIndices[index];
-        if (c.i > 0) adjs.push_back(calcIndex(c.i-1, c.j));
-        if (c.i < 4) adjs.push_back(calcIndex(c.i+1, c.j));
-        if (c.j > 0) adjs.push_back(calcIndex(c.i, c.j-1));
-        if (c.j < 5) adjs.push_back(calcIndex(c.i, c.j+1));
-    }
-    update(masses, color, inputColor);
-    inited = true;
-};
-
-void Student::update(int masses[5][6], Color color[5][6], Color inputColor) {
-    playerColor = inputColor;
-    if (playerColor == Blue) enemyColor = Red;
-    else enemyColor = Blue;
-    for (int i = 0 ; i < 30 ; ++i) {
-        Cell &c = cells[i];
-        if (c.mass != masses[c.i][c.j]) c.mass = masses[c.i][c.j];
-        if (c.color != color[c.i][c.j]) c.color = color[c.i][c.j];
-    }
-};
-
-inline short Student::calcIndex(const short i , const short j) const {
-    return i*6+j;
-};
-
-int Student::maxVal(shared_ptr<State> s, const int alpha, const int beta,
-        const bool hasAlpha, const bool hasBeta) {
-    if (s->treeLevel == gameTreeLevel) {return s->score;}
-    if (hasAlpha) {s->hasAlpha = true; s->alpha = alpha;}
-    if (hasBeta) {s->hasBeta = true; s->beta = beta;}
-
-    s->minmax = -2147483647-1;
-    vector<short> rawMoves = rawPossibleMoves(s); // make better move for player in front of vector
-    for (short i = 0 ; i < rawMoves.size() ; ++i) {
-        auto child = make_shared<State>(*s);
-        nextMove(child, rawMoves[i]);
-        if (child->isBadMove) continue;
-        int value = minVal(child, s->alpha, s->beta, s->hasAlpha, s->hasBeta);
-        if (value > s->minmax) {s->minmax = value; s->choiceIndex = rawMoves[i];}
-        if (s->hasBeta && value >= s->beta) {return value;}
-        if (!s->hasAlpha || value > s->alpha) {s->hasAlpha = true; s->alpha = value;}
-    }
-
-    return s->minmax;
-};
-
-int Student::minVal(shared_ptr<State> s, const int alpha, const int beta,
-        const bool hasAlpha, const bool hasBeta) {
-    if (s->treeLevel == gameTreeLevel) {return s->score;}
-    if (hasAlpha) {s->hasAlpha = true; s->alpha = alpha;}
-    if (hasBeta) {s->hasBeta = true; s->beta = beta;}
-
-    s->minmax = 2147483647;
-    vector<short> rawMoves = rawPossibleMoves(s);
-    for (short i = 0 ; i < rawMoves.size() ; ++i) {
-        auto child = make_shared<State>(*s);
-        nextMove(child, rawMoves[i]);
-        if (child->isBadMove) continue;
-        int value = maxVal(child, s->alpha, s->beta, s->hasAlpha, s->hasBeta);
-        if (value < s->minmax) {s->minmax = value; s->choiceIndex = rawMoves[i];}
-        if (s->hasAlpha && value <= s->alpha) {return value;}
-        if (!s->hasBeta || value < s->beta) {s->hasBeta = true; s->beta = value;}
-
-    }
-    return s->minmax;
-};
-
-vector<short> Student::rawPossibleMoves(const shared_ptr<State> s) {
-    vector<short> moves;
-    if (rounds+s->treeLevel <= 4) {
-        for (short i = 0 ; i < 12 ; ++i) {
-            Cell &c = s->cells[OpeningSeq[i]];
-            if (c.color == White || c.color == s->currentPlayerColor)
-                moves.push_back(c.index);
+int_fast16_t Student::maxVal(GameState& s) {
+    if (s.level == gameTreeLevel || s.state >=2) {return scoring(s);}
+    int_fast16_t minimax = -32767;
+    const auto moves = availableMoves(s);
+    for (int_fast8_t i = 0, size = moves.size() ; i != size ; ++i) {
+        auto nextState(s);
+        execute(nextState, moves[i]);
+        if (nextState.state == 1) continue; // explode without enemy converted
+        const int_fast16_t value = minVal(nextState);
+        if (value > minimax) {
+            minimax = value;
+            if (!s.level) choiceIndex = moves[i];
         }
-    } else {
-        for (short i = 0 ; i < 30 ; ++i) {
-            Cell &c = s->cells[pmSeq[i]];
-            if (c.color == White || c.color == s->currentPlayerColor)
-                moves.push_back(c.index);
-        }
+        if (s.hasBeta && value >= s.beta) return value;
+        if (!s.hasAlpha || value > s.alpha) {s.hasAlpha = true; s.alpha = value;}
+    }
+    return minimax;
+};
+
+int_fast16_t Student::minVal(GameState& s) {
+    if (s.level == gameTreeLevel || s.state >= 2) {return scoring(s);}
+    int_fast16_t minimax = 32767;
+    const auto moves = availableMoves(s);
+    for (int_fast8_t i = 0, size = moves.size() ; i != size ; ++i) {
+        auto nextState(s);
+        execute(nextState, moves[i]);
+        if (nextState.state == 1) continue; // explode without enemy converted
+        const int_fast16_t value = maxVal(nextState);
+        if (value < minimax) minimax = value;
+        if (s.hasAlpha && value <= s.alpha) return value;
+        if (!s.hasBeta || value < s.beta) {s.hasBeta = true; s.beta = value;}
+    }
+    return minimax;
+};
+
+inline const vector<int_fast8_t> Student::availableMoves(const GameState& s) const{
+    vector<int_fast8_t> moves;
+    // if (rounds+s.level <= 5) {
+    //     for (int_fast8_t i = 0 ; i < 12 ; ++i)
+    //         if ((s.cells[OpeningSeq[i]].color == White || s.cells[OpeningSeq[i]].color == s.currentPlayerColor)
+    //                 && s.cells[OpeningSeq[i]].mass < critical[OpeningSeq[i]])
+    //             moves.push_back(s.cells[OpeningSeq[i]].index);
+    // } else {
+    //     for (int_fast8_t i = 0 ; i < 30 ; ++i) {
+    //         if ((s.cells[pmSeq[i]].color == White || s.cells[pmSeq[i]].color == s.currentPlayerColor)
+    //                 && s.cells[pmSeq[i]].mass < critical[pmSeq[i]])
+    //             moves.push_back(pmSeq[i]);
+    //     }
+    // }
+    for (int_fast8_t i = 0; i < 30 ; ++i) {
+        if (s.cells[i].color == White || s.cells[i].color == s.currentPlayerColor)
+            moves.push_back(i);
     }
     return moves;
 };
 
-void Student::nextMove(shared_ptr<State> state, const short rawMoveIndex) {
-    State &s = *state;
-    ++s.treeLevel;
-    queue<short> addList;
-    addList.push(rawMoveIndex);
-    bool exploded = false, convertEnemy = false;
+inline void Student::execute(GameState& s, const int_fast8_t index) {
+    ++execCount;
+    ++s.level; // update Game tree level for this GameState
+    queue<int_fast8_t> addMassList;
+    addMassList.push(index);
+    bool exploded = false; //, convertEnemy = false;
+    int_fast16_t converted = 0;
 
-    while(!addList.empty()) {
-        Cell &c = s.cells[addList.front()]; addList.pop();
-        if (c.color == Black) continue;
+    while(!addMassList.empty()) {
+        Cell &c = s.cells[addMassList.front()]; addMassList.pop();
         ++c.mass;
-        if (c.color == s.nextPlayerColor && !convertEnemy) convertEnemy = true;
+        if (c.color == s.nextPlayerColor) ++converted;
         if (c.color != s.currentPlayerColor) c.color = s.currentPlayerColor;
-        if (c.mass == c.critical) {
+        if (c.mass == critical[c.index]) {
             c.color = Black;
-            const std::vector<short> &adjs = adjIndices[c.index];
-            for (short i = 0 ; i < adjs.size(); ++i) {
-                addList.push(adjs[i]);
+            const auto &adjs = adjIndices[c.index];
+            for (int_fast8_t i = 0, size = adjs.size() ; i != size ; ++i) {
+                if (s.cells[adjs[i]].color != Black) addMassList.push(adjs[i]);
             }
             if (!exploded) exploded = true;
-        }
-    }
+    }}
     
-    if (exploded && !convertEnemy) {
-        s.isBadMove = true;
-        return;
-    }
+    if (exploded) {
+        if (!converted) {
+            if (rounds+s.level<15) {s.state = 1; return;} // bad move
+        } else {
+            if (s.currentPlayerColor == Blue) s.convertRed += converted;
+            else s.convertBlue += converted;
+            bool hasPlayerColor = false, hasEnemyColor = false;
+            for (int_fast8_t i = 0 ; i < 30 ; ++i) {
+                if (!hasPlayerColor && s.cells[i].color == playerColor) hasPlayerColor = true;
+                if (!hasEnemyColor && s.cells[i].color == enemyColor) hasEnemyColor = true;
+                if (hasPlayerColor && hasEnemyColor) break;
+            }
+            if (hasPlayerColor && !hasEnemyColor) {s.state = 2; return;} // player win
+            if (hasEnemyColor && !hasPlayerColor) {s.state = 3; return;} // enemy win
+    }}
 
-    scoring(state, exploded, convertEnemy);
-
-    s.choiceIndex = rawMoveIndex;
-    const Color _tmp = s.currentPlayerColor;
-    s.currentPlayerColor = s.nextPlayerColor;
-    s.nextPlayerColor = _tmp;
+    s.swapColor();
 };
 
-void Student::scoring(shared_ptr<State> s, const bool exploded, const bool convertEnemy) {
-    int playerMass = 0, enemyMass = 0;
-    for (int i = 0 ; i < 30 ; ++i) {
-        if (s->cells[i].color == playerColor) playerMass += s->cells[i].mass;
-        else if (s->cells[i].color == enemyColor) enemyMass += s->cells[i].mass;
-    }
-    int playerCorner = 0, playerEdge = 0, enemyCorner = 0, enemyEdge = 0;
-    const short corners[4] {0, 5, 24, 29};
-    for (const short& i : corners) {
-        if (s->cells[i].color == playerColor) playerCorner += 3;
-        else if (s->cells[i].color == enemyColor) enemyCorner += 3;
-    }
-    const short edges[14] {1, 2, 3, 4, 6, 11, 12, 17, 18, 23, 26, 26, 27, 28};
-    for (const short& i : edges) {
-        if (s->cells[i].color == playerColor) playerCorner += 1;
-        else if (s->cells[i].color == enemyColor) enemyCorner += 1;
-    }
+inline int_fast16_t Student::scoring(GameState& s) {
+    if (s.state == 2) return 32767; // GameOver, player win
+    else if (s.state == 3) return -32767; // GameOver, player lose
 
-    if (convertEnemy) {
-        if (!enemyMass && s->currentPlayerColor == playerColor) {
-            s->score = 2147483647;
-            s->gameOver = true;
-            return;
-        } else if (!playerMass && s->currentPlayerColor == enemyColor) {
-            s->score = -2147483647-1;
-            s->gameOver = true;
-            return;
-        }
+    s.swapColor();
+    // short score = 0;
+    // for (int_fast8_t i = 0 ; i < 30 ; ++i) {
+    //     if (s.cells[i].color != playerColor) continue;
+    //     const auto &adjs = adjIndices[i];
+    //     int_fast8_t criticalEmeny = 0;
+    //     for (int_fast8_t j = 0, size = adjs.size() ; j != size ; ++j) {
+    //         if (s.cells[j].color == enemyColor && 
+    //             s.cells[j].mass == critical[j]-1) ++criticalEmeny;
+    //     }
+    //     if (criticalEmeny) {
+    //         score -= criticalEmeny * (5-critical[i]);;
+    //     } else {
+    //         bool found = false;
+    //         if (i == 0 || i == 5 || i == 24 || i == 29) score += 3;
+    //         else if (i == 1 || i ==2 || i ==3 || i ==4 || i ==6 || i ==11 || i ==12 ||
+    //             i ==17 || i ==18 || i ==23 || i ==25 || i ==26 || i ==28 || i ==28)
+    //             score += 2;
+    //         if (s.cells[i].mass == critical[i]-1) score += 2;
+    //     }
+    //     score += s.cells[i].mass;
+    // }
+
+    int_fast16_t playerMass = 0, enemyMass = 0;
+    for (int_fast8_t i = 0 ; i < 30 ; ++i) {
+        if (s.cells[i].color == playerColor) playerMass += s.cells[i].mass;
+        else if (s.cells[i].color == enemyColor) enemyMass += s.cells[i].mass;
     }
-    s->score = (playerMass*5 + playerCorner + playerEdge)
+    int_fast16_t playerCorner = 0, playerEdge = 0, enemyCorner = 0, enemyEdge = 0;
+    for (int_fast8_t i = 0 ; i < 4 ; ++i) {
+        if (s.cells[corners[i]].color == playerColor) playerCorner += 3;
+        else if (s.cells[corners[i]].color == enemyColor) enemyCorner += 3;
+    }
+    for (int_fast8_t i = 0 ; i < 14 ; ++i) {
+        if (s.cells[edges[i]].color == playerColor) playerCorner += 1;
+        else if (s.cells[edges[i]].color == enemyColor) enemyCorner += 1;
+    }
+    short score = (playerMass*5 + playerCorner + playerEdge)
         - (enemyMass*5 + enemyCorner + enemyEdge);
+    // if (s.currentPlayerColor == Red) score += (s.convertBlue - s.convertRed)*2;
+    // else score += (s.convertRed - s.convertBlue)*2;
+    return score;
 };
